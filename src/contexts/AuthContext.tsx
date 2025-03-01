@@ -36,17 +36,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     // Check for active session on mount
     const checkUser = async () => {
-      const { data } = await supabase.auth.getSession();
+      const { data, error } = await supabase.auth.getSession();
+
+      if (error) {
+        console.error("Session fetch error:", error);
+        return;
+      }
 
       if (data.session?.user) {
         // Fetch user profile from profiles table
-        const { data: profileData, error } = await supabase
+        const { data: profileData, error: profileError } = await supabase
           .from("profiles")
           .select("*")
           .eq("id", data.session.user.id)
           .single();
 
-        if (!error && profileData) {
+        if (!profileError && profileData) {
+          // User profile exists, set user state
           setUser({
             id: data.session.user.id,
             email: data.session.user.email || "",
@@ -55,6 +61,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
             listingsCount: profileData.listings_count || 0,
             createdAt: profileData.created_at,
           });
+        } else {
+          console.warn("Profile not found, inserting into database...");
+          
+          // Retrieve username from localStorage
+          const storedUsername = localStorage.getItem("pendingUsername") || "User";
+
+          // Insert new profile for confirmed user
+          const { error: insertError } = await supabase.from("profiles").insert([
+            {
+              id: data.session.user.id,
+              username: storedUsername, // ✅ Use stored username instead of email prefix
+              tier: "free",
+              listings_count: 0,
+              created_at: new Date().toISOString(),
+            },
+          ]);
+
+          if (insertError) {
+            console.error("Profile insert error:", insertError);
+          } else {
+            // Fetch and set the newly created profile
+            const { data: newProfile } = await supabase
+              .from("profiles")
+              .select("*")
+              .eq("id", data.session.user.id)
+              .single();
+  
+            if (newProfile) {
+              setUser({
+                id: newProfile.id,
+                email: data.session.user.email || "",
+                username: newProfile.username,
+                tier: newProfile.tier || "free",
+                listingsCount: newProfile.listings_count || 0,
+                createdAt: newProfile.created_at,
+              });
+
+              // Clear pending username from localStorage
+              localStorage.removeItem("pendingUsername");
+            }
+          }
+
         }
       }
 
@@ -67,27 +115,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (event === "SIGNED_IN" && session) {
-          // Fetch user profile
-          const { data: profileData, error } = await supabase
-            .from("profiles")
-            .select("*")
-            .eq("id", session.user.id)
-            .single();
-
-          if (!error && profileData) {
-            setUser({
-              id: session.user.id,
-              email: session.user.email || "",
-              username: profileData.username,
-              tier: profileData.tier || "free",
-              listingsCount: profileData.listings_count || 0,
-              createdAt: profileData.created_at,
-            });
-          }
+          checkUser(); // Force refresh user state after sign-in
         } else if (event === "SIGNED_OUT") {
           setUser(null);
         }
-      },
+      }
     );
 
     return () => {
@@ -95,36 +127,54 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     };
   }, []);
 
+
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+
+  if (error) {
+    console.error("Login error:", error);
     return { error };
-  };
+  }
+
+  // ✅ Explicitly refresh session after login
+  await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait 1 second
+  const { data: refreshedSession, error: sessionError } = await supabase.auth.getSession();
+
+  if (sessionError) {
+    console.error("Session refresh error:", sessionError);
+  }
+  
+  return { error: null };
+};
+
+
+
+
 
   const signUp = async (email: string, password: string, username: string) => {
-    const { data, error } = await supabase.auth.signUp({ email, password });
-
-    if (!error && data.user) {
-      // Create a profile record
-      const { error: profileError } = await supabase.from("profiles").insert([
-        {
-          id: data.user.id,
-          username,
-          tier: "free",
-          listings_count: 0,
-          created_at: new Date().toISOString(),
-        },
-      ]);
-
-      if (profileError) {
-        return { error: profileError, user: null };
-      }
+    const { data, error } = await supabase.auth.signUp({ email, password});
+  
+    if (error) return { error, user: null }; 
+  
+    if (!data?.user) {
+      return { error: new Error("User registration failed!"), user: null };
     }
+     
+    // Store the username in localStorage to be used after confirmation
+    localStorage.setItem("pendingUsername", username);
 
-    return { error, user: data.user };
+    // Tell the user to confirm their email
+    alert("Please check your email to confirm your account before logging in.");
+
+    return { error: null, user: data.user };
   };
+
+  
+  
+  
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -158,6 +208,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const upgradeToPaid = async () => {
     if (!user) return { error: new Error("Not authenticated") };
+     
+    // Simulate payment processing
+    alert("Payment successful! Your account has been upgraded.");
 
     // In a real app, this would connect to a payment processor
     // For now, we'll just update the tier in the database
@@ -165,12 +218,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       .from("profiles")
       .update({ tier: "paid" })
       .eq("id", user.id);
+    
+    if (error) return { error };
 
-    if (!error) {
-      setUser({ ...user, tier: "paid" });
-    }
+    // Update user state locally
+    setUser({ ...user, tier: "paid" });
 
-    return { error };
+    return { error: null };
   };
 
   const value = {

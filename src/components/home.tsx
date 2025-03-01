@@ -3,7 +3,7 @@ import Navbar from "./Navbar";
 import SearchSection from "./SearchSection";
 import ProductGrid from "./ProductGrid";
 import CreateListingModal from "./CreateListingModal";
-import FloatingNavigation from "./FloatingNavigation";
+//import FloatingNavigation from "./FloatingNavigation";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -324,11 +324,8 @@ const Home = () => {
   return (
     <div className="min-h-screen bg-gradient-to-b from-amber-50 to-white">
       {/* Navbar */}
-      <Navbar
-        onCreateListing={handleCreateListing}
-        onSearch={handleSearch}
-        cartItemCount={cartItemCount}
-      />
+      <Navbar onCreateListing={() => setIsCreateListingOpen(true)} cartItemCount={cartItemCount} />
+
 
       {/* Main Content */}
       <main className="pt-24 pb-16 px-4">
@@ -355,7 +352,7 @@ const Home = () => {
       </main>
 
       {/* Floating Navigation */}
-      <FloatingNavigation />
+      {/*<FloatingNavigation />*/}
 
       {/* Create Listing Modal */}
       <CreateListingModal
