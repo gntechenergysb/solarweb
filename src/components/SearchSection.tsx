@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from "react";
-import { Search, X, Filter, SunMedium, Zap, Battery } from "lucide-react";
+import React, { useState, useEffect } from "react"; 
+import { Search, X, Filter, SunMedium, Zap, Battery, Grid, MapPin, Plug, MoreHorizontal } from "lucide-react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "@/contexts/LanguageContext";
 import CategorySpecificFilters from "./filters/CategorySpecificFilters";
@@ -14,6 +14,7 @@ interface SearchSectionProps {
   onFilterChange?: (filters: string[]) => void;
   initialCategory?: string;
   initialFilters?: string[];
+  filterSuggestions?: { [category: string]: string[] };
 }
 
 const SearchSection = ({
@@ -22,6 +23,7 @@ const SearchSection = ({
   onFilterChange = () => {},
   initialCategory = "all",
   initialFilters = [],
+  filterSuggestions = {},
 }: SearchSectionProps) => {
   const { t } = useLanguage();
   const [searchQuery, setSearchQuery] = useState("");
@@ -30,43 +32,7 @@ const SearchSection = ({
   const [showFilterSuggestions, setShowFilterSuggestions] = useState(false);
   const [showCategoryFilters, setShowCategoryFilters] = useState(false);
 
-  // Sample filter suggestions based on categories
-  const filterSuggestions = {
-    all: [
-      "New",
-      "Used",
-      "Refurbished",
-      "Warranty",
-      "Free Shipping",
-      "Local Pickup",
-    ],
-    panels: [
-      "Monocrystalline",
-      "Polycrystalline",
-      "Thin Film",
-      "Bifacial",
-      "High Efficiency",
-      "Flexible",
-    ],
-    inverters: [
-      "String",
-      "Microinverter",
-      "Hybrid",
-      "Off-Grid",
-      "Grid-Tied",
-      "Battery Ready",
-    ],
-    batteries: [
-      "Lithium-Ion",
-      "Lead-Acid",
-      "Flow",
-      "Salt Water",
-      "High Capacity",
-      "Compact",
-    ],
-  };
-
-  // Show category-specific filters when category changes
+  
   useEffect(() => {
     if (activeCategory !== "all") {
       setShowCategoryFilters(true);
@@ -78,15 +44,13 @@ const SearchSection = ({
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      handleSearch();
-    }
+    if (e.key === "Enter") handleSearch();
   };
 
   const handleCategoryChange = (category: string) => {
     setActiveCategory(category);
     onCategoryChange(category);
-    // Reset filters when changing categories
+    // Reset filters when category changes
     setActiveFilters([]);
     onFilterChange([]);
   };
@@ -110,13 +74,10 @@ const SearchSection = ({
     onSearch("");
   };
 
-  // Get current filter suggestions based on active category
-  const currentSuggestions =
-    filterSuggestions[activeCategory as keyof typeof filterSuggestions] ||
-    filterSuggestions.all;
+  const currentSuggestions = filterSuggestions[activeCategory] || [];
 
   return (
-    <div className="w-full max-w-6xl mx-auto px-4 py-6 bg-gradient-to-b from-amber-50 to-white rounded-xl shadow-sm">
+    <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 md:px-8 py-6 bg-gradient-to-b from-amber-50 to-white rounded-xl shadow-sm">
       {/* Search Input */}
       <div className="relative mb-4">
         <div className="relative flex items-center">
@@ -148,73 +109,96 @@ const SearchSection = ({
       </div>
 
       {/* Category Tabs */}
-      <div className="flex items-center justify-between mb-4">
-        <Tabs
-          defaultValue={activeCategory}
-          value={activeCategory}
-          onValueChange={handleCategoryChange}
-          className="w-full max-w-md"
-        >
-          <TabsList className="grid grid-cols-4 bg-amber-50">
-            <TabsTrigger
-              value="all"
-              className={cn(
-                "data-[state=active]:bg-amber-200 data-[state=active]:text-amber-900",
-                "transition-all duration-200",
-              )}
-            >
-              {t("category.all")}
-            </TabsTrigger>
-            <TabsTrigger
-              value="panels"
-              className={cn(
-                "data-[state=active]:bg-amber-200 data-[state=active]:text-amber-900",
-                "transition-all duration-200 flex items-center gap-1",
-              )}
-            >
-              <SunMedium size={16} />
-              {t("category.panels")}
-            </TabsTrigger>
-            <TabsTrigger
-              value="inverters"
-              className={cn(
-                "data-[state=active]:bg-amber-200 data-[state=active]:text-amber-900",
-                "transition-all duration-200 flex items-center gap-1",
-              )}
-            >
-              <Zap size={16} />
-              {t("category.inverters")}
-            </TabsTrigger>
-            <TabsTrigger
-              value="batteries"
-              className={cn(
-                "data-[state=active]:bg-amber-200 data-[state=active]:text-amber-900",
-                "transition-all duration-200 flex items-center gap-1",
-              )}
-            >
-              <Battery size={16} />
-              {t("category.batteries")}
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-
-        <Button
-          variant="outline"
-          size="sm"
-          className="ml-2 flex items-center gap-1 border-amber-200 hover:bg-amber-100"
-          onClick={() => setShowFilterSuggestions(!showFilterSuggestions)}
-        >
-          <Filter size={16} />
-          {t("filter.title")}
-          {activeFilters.length > 0 && (
-            <Badge
-              variant="secondary"
-              className="ml-1 bg-amber-200 text-amber-900"
-            >
-              {activeFilters.length}
-            </Badge>
-          )}
-        </Button>
+      <div className="flex flex-col sm:flex-row items-center justify-between mb-4">
+        {/* Use horizontal scroll for mobile */}
+        <div className="w-full overflow-x-auto">
+          <Tabs
+            defaultValue={activeCategory}
+            value={activeCategory}
+            onValueChange={handleCategoryChange}
+            className="w-full"
+          >
+            <TabsList className="flex flex-nowrap items-center gap-4 bg-amber-50 p-3 rounded-lg">
+              <TabsTrigger
+                value="all"
+                className={cn(
+                  "min-w-[80px] px-3 py-2 rounded flex items-center gap-1",
+                  "data-[state=active]:bg-amber-200 data-[state=active]:text-amber-900",
+                  "transition-colors duration-200"
+                )}
+              >
+                <Grid size={20} />
+                <span className="whitespace-nowrap">All</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="panels"
+                className={cn(
+                  "min-w-[80px] px-3 py-2 rounded flex items-center gap-1",
+                  "data-[state=active]:bg-amber-200 data-[state=active]:text-amber-900",
+                  "transition-colors duration-200"
+                )}
+              >
+                <SunMedium size={20} />
+                <span className="whitespace-nowrap">Panels</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="inverters"
+                className={cn(
+                  "min-w-[80px] px-3 py-2 rounded flex items-center gap-1",
+                  "data-[state=active]:bg-amber-200 data-[state=active]:text-amber-900",
+                  "transition-colors duration-200"
+                )}
+              >
+                <Zap size={20} />
+                <span className="whitespace-nowrap">Inverters</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="batteries"
+                className={cn(
+                  "min-w-[80px] px-3 py-2 rounded flex items-center gap-1",
+                  "data-[state=active]:bg-amber-200 data-[state=active]:text-amber-900",
+                  "transition-colors duration-200"
+                )}
+              >
+                <Battery size={20} />
+                <span className="whitespace-nowrap">Batteries</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="mounting"
+                className={cn(
+                  "min-w-[100px] px-3 py-2 rounded flex items-center gap-1",
+                  "data-[state=active]:bg-amber-200 data-[state=active]:text-amber-900",
+                  "transition-colors duration-200"
+                )}
+              >
+                <MapPin size={20} />
+                <span className="whitespace-nowrap">Mounting</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="cable"
+                className={cn(
+                  "min-w-[80px] px-3 py-2 rounded flex items-center gap-1",
+                  "data-[state=active]:bg-amber-200 data-[state=active]:text-amber-900",
+                  "transition-colors duration-200"
+                )}
+              >
+                <Plug size={20} />
+                <span className="whitespace-nowrap">Cable</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="others"
+                className={cn(
+                  "min-w-[80px] px-3 py-2 rounded flex items-center gap-1",
+                  "data-[state=active]:bg-amber-200 data-[state=active]:text-amber-900",
+                  "transition-colors duration-200"
+                )}
+              >
+                <MoreHorizontal size={20} />
+                <span className="whitespace-nowrap">Others</span>
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
       </div>
 
       {/* Active Filters */}
@@ -243,7 +227,7 @@ const SearchSection = ({
         </div>
       )}
 
-      {/* Category-specific filters */}
+      {/* Category-Specific Filters */}
       {showCategoryFilters && activeCategory !== "all" && (
         <div className="mb-4 animate-in slide-in-from-top duration-300">
           <div className="flex justify-between items-center mb-2">
@@ -290,7 +274,7 @@ const SearchSection = ({
                   "px-3 py-1 cursor-pointer",
                   activeFilters.includes(filter)
                     ? "bg-amber-200 text-amber-900 hover:bg-amber-300 border-transparent"
-                    : "bg-transparent text-gray-700 hover:bg-amber-50 border-gray-200",
+                    : "bg-transparent text-gray-700 hover:bg-amber-50 border-gray-200"
                 )}
                 onClick={() => toggleFilter(filter)}
               >

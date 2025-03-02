@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { useForm } from "react-hook-form";
+import React, { useState, useEffect } from "react";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Upload, X, Image, Plus, Check, Info } from "lucide-react";
@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter,
+
 } from "@/components/ui/dialog";
 import {
   Form,
@@ -33,13 +33,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import CategorySpecificFilters from "./filters/CategorySpecificFilters";
+import { supabase } from "@/lib/supabase"; // Import Supabase client
 
 const formSchema = z.object({
   title: z.string().min(5, { message: "Title must be at least 5 characters" }),
-  description: z
-    .string()
-    .min(20, { message: "Description must be at least 20 characters" }),
-  category: z.enum(["panels", "inverters", "batteries", "accessories"]),
+  description: z.string().min(20, { message: "Description must be at least 20 characters" }),
+  category: z.enum(["panels", "inverters", "batteries", "mounting", "cable", "others"]),
   condition: z.enum(["1", "2", "3", "4", "5"]),
   price: z.string().refine((val) => !isNaN(Number(val)) && Number(val) > 0, {
     message: "Price must be a positive number",
@@ -50,7 +50,7 @@ const formSchema = z.object({
 interface CreateListingModalProps {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  onSubmit?: (values: z.infer<typeof formSchema>) => void;
+  onSubmit?: (values: z.infer<typeof formSchema> & { filters?: (string | number)[] }) => void;
 }
 
 const CreateListingModal = ({
@@ -61,9 +61,12 @@ const CreateListingModal = ({
   const [step, setStep] = useState<"details" | "images" | "preview">("details");
   const [images, setImages] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // State to hold additional category-specific filters. They can be string or number.
+  const [categoryFilters, setCategoryFilters] = useState<(string | number)[]>([]);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
+    mode: "onChange", // validate on every change so that Next is only active when all required fields are filled
     defaultValues: {
       title: "",
       description: "",
@@ -74,10 +77,21 @@ const CreateListingModal = ({
     },
   });
 
+  // Watch the current category to render corresponding filters
+  const selectedCategory = useWatch({
+    control: form.control,
+    name: "category",
+  });
+
+  // Reset category-specific filters when the category changes
+  useEffect(() => {
+    setCategoryFilters([]);
+  }, [selectedCategory]);
+
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const newImages = Array.from(e.target.files).map((file) =>
-        URL.createObjectURL(file),
+        URL.createObjectURL(file)
       );
       setImages((prev) => [...prev, ...newImages]);
     }
@@ -87,14 +101,37 @@ const CreateListingModal = ({
     setImages((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleSubmit = (values: z.infer<typeof formSchema>) => {
+  const handleSubmitInternal = async (values: z.infer<typeof formSchema>) => {
     setIsSubmitting(true);
-    // Simulate API call
-    setTimeout(() => {
-      onSubmit(values);
+    const submissionData = {
+      ...values,
+      filters: categoryFilters,
+      images,
+    };
+
+    try {
+      // Push data to Supabase
+      const { error } = await supabase.from("listings").insert([submissionData]);
+
+      if (error) {
+        console.error("Error inserting data:", error);
+        alert("Failed to publish listing. Please try again.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Simulate API call
+      setTimeout(() => {
+        onSubmit(submissionData);
+        setIsSubmitting(false);
+        onOpenChange(false);
+        alert("Listing published successfully!");
+      }, 1500);
+    } catch (error) {
+      console.error("Unexpected error:", error);
+      alert("An unexpected error occurred. Please try again.");
       setIsSubmitting(false);
-      onOpenChange(false);
-    }, 1500);
+    }
   };
 
   const nextStep = () => {
@@ -138,28 +175,18 @@ const CreateListingModal = ({
             <TabsTrigger value="details" disabled={step === "preview"}>
               Details
             </TabsTrigger>
-            <TabsTrigger
-              value="images"
-              disabled={!form.formState.isValid && step === "details"}
-            >
+            <TabsTrigger value="images" disabled={!form.formState.isValid && step === "details"}>
               Images
             </TabsTrigger>
-            <TabsTrigger
-              value="preview"
-              disabled={
-                (images.length === 0 && step === "images") || step === "details"
-              }
-            >
+            <TabsTrigger value="preview" disabled={(images.length === 0 && step === "images") || step === "details"}>
               Preview
             </TabsTrigger>
           </TabsList>
 
+          {/* DETAILS TAB */}
           <TabsContent value="details" className="space-y-4 mt-4">
             <Form {...form}>
-              <form
-                className="space-y-4"
-                onSubmit={form.handleSubmit(nextStep)}
-              >
+              <form className="space-y-4" onSubmit={form.handleSubmit(nextStep)}>
                 <FormField
                   control={form.control}
                   name="title"
@@ -184,10 +211,7 @@ const CreateListingModal = ({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Category</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          defaultValue={field.value}
-                        >
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select a category" />
@@ -197,9 +221,9 @@ const CreateListingModal = ({
                             <SelectItem value="panels">Solar Panels</SelectItem>
                             <SelectItem value="inverters">Inverters</SelectItem>
                             <SelectItem value="batteries">Batteries</SelectItem>
-                            <SelectItem value="accessories">
-                              Accessories
-                            </SelectItem>
+                            <SelectItem value="mounting">Mounting Structure</SelectItem>
+                            <SelectItem value="cable">Cable</SelectItem>
+                            <SelectItem value="others">Others</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -213,23 +237,18 @@ const CreateListingModal = ({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Condition</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          defaultValue={field.value}
-                        >
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select condition" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {Object.entries(conditionLabels).map(
-                              ([value, label]) => (
-                                <SelectItem key={value} value={value}>
-                                  {label}
-                                </SelectItem>
-                              ),
-                            )}
+                            {Object.entries(conditionLabels).map(([value, label]) => (
+                              <SelectItem key={value} value={value}>
+                                {label}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -246,13 +265,7 @@ const CreateListingModal = ({
                       <FormItem>
                         <FormLabel>Price ($)</FormLabel>
                         <FormControl>
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            placeholder="0.00"
-                            {...field}
-                          />
+                          <Input type="number" min="0" step="0.01" placeholder="0.00" {...field} />
                         </FormControl>
                         <FormDescription>
                           <div className="flex items-center gap-1 text-amber-600">
@@ -280,6 +293,19 @@ const CreateListingModal = ({
                   />
                 </div>
 
+                {/* Additional Filters */}
+                {selectedCategory && (
+                  <div className="mt-6">
+                    <h4 className="font-medium text-gray-700 mb-2">Additional Filters</h4>
+                    <CategorySpecificFilters
+                      category={selectedCategory}
+                      activeFilters={categoryFilters}
+                      onFilterChange={setCategoryFilters}
+                    />
+                  </div>
+                )}
+
+                {/* Description moved to the end */}
                 <FormField
                   control={form.control}
                   name="description"
@@ -307,74 +333,50 @@ const CreateListingModal = ({
             </Form>
           </TabsContent>
 
+          {/* IMAGES TAB */}
           <TabsContent value="images" className="space-y-4 mt-4">
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-              <div className="space-y-4">
-                <div className="flex flex-wrap gap-4 justify-center mb-6">
-                  {images.map((image, index) => (
-                    <div key={index} className="relative w-32 h-32 group">
-                      <img
-                        src={image}
-                        alt={`Uploaded image ${index + 1}`}
-                        className="w-full h-full object-cover rounded-md"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeImage(index)}
-                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <X size={16} />
-                      </button>
-                    </div>
-                  ))}
-
-                  <label className="w-32 h-32 flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-md cursor-pointer hover:bg-gray-50 transition-colors">
-                    <Plus size={24} className="text-gray-400" />
-                    <span className="text-sm text-gray-500 mt-2">
-                      Add Image
-                    </span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      className="hidden"
-                      onChange={handleImageUpload}
+            <div
+              className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:bg-gray-50 transition-colors"
+              onClick={() => document.getElementById("imageUpload")?.click()}
+            >
+              <input
+                id="imageUpload"
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={handleImageUpload}
+              />
+              <div className="flex flex-wrap gap-4 justify-center mb-6">
+                {images.map((image, index) => (
+                  <div key={index} className="relative w-32 h-32 group">
+                    <img
+                      src={image}
+                      alt={`Uploaded image ${index + 1}`}
+                      className="w-full h-full object-cover rounded-md"
                     />
-                  </label>
-                </div>
-
-                {images.length === 0 && (
-                  <div className="flex flex-col items-center justify-center py-4">
-                    <Upload className="h-12 w-12 text-gray-400 mb-2" />
-                    <h3 className="text-lg font-medium">
-                      Drag and drop your images
-                    </h3>
-                    <p className="text-sm text-gray-500 mb-4">
-                      or click to browse files
-                    </p>
-                    <label className="cursor-pointer">
-                      <Button variant="outline" className="gap-2">
-                        <Image size={16} />
-                        Select Images
-                      </Button>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        className="hidden"
-                        onChange={handleImageUpload}
-                      />
-                    </label>
+                    <button
+                      type="button"
+                      onClick={() => removeImage(index)}
+                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X size={16} />
+                    </button>
                   </div>
-                )}
-
-                {images.length > 0 && (
-                  <p className="text-sm text-gray-500">
-                    {images.length} {images.length === 1 ? "image" : "images"}{" "}
-                    uploaded. You can add up to 10 images.
-                  </p>
-                )}
+                ))}
               </div>
+              {images.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-4">
+                  <Upload className="h-12 w-12 text-gray-400 mb-2" />
+                  <h3 className="text-lg font-medium">Drag and drop your images</h3>
+                  <p className="text-sm text-gray-500 mb-4">or click anywhere to upload</p>
+                </div>
+              )}
+              {images.length > 0 && (
+                <p className="text-sm text-gray-500">
+                  {images.length} {images.length === 1 ? "image" : "images"} uploaded. You can add up to 10 images.
+                </p>
+              )}
             </div>
 
             <div className="flex justify-between">
@@ -387,12 +389,10 @@ const CreateListingModal = ({
             </div>
           </TabsContent>
 
+          {/* PREVIEW TAB */}
           <TabsContent value="preview" className="space-y-6 mt-4">
             <div className="bg-gray-50 rounded-lg p-6">
-              <h3 className="text-xl font-semibold mb-4">
-                {form.getValues().title}
-              </h3>
-
+              <h3 className="text-xl font-semibold mb-4">{form.getValues().title}</h3>
               {images.length > 0 && (
                 <div className="mb-6 overflow-hidden rounded-lg">
                   <img
@@ -400,7 +400,7 @@ const CreateListingModal = ({
                     alt="Primary product image"
                     className="w-full h-64 object-cover"
                   />
-
+                  
                   {images.length > 1 && (
                     <div className="flex mt-2 gap-2 overflow-x-auto pb-2">
                       {images.slice(1).map((image, index) => (
@@ -422,26 +422,17 @@ const CreateListingModal = ({
                   <dl className="space-y-2">
                     <div className="flex justify-between">
                       <dt className="text-gray-500">Category:</dt>
-                      <dd className="font-medium capitalize">
-                        {form.getValues().category}
-                      </dd>
+                      <dd className="font-medium capitalize">{form.getValues().category}</dd>
                     </div>
                     <div className="flex justify-between">
                       <dt className="text-gray-500">Condition:</dt>
                       <dd className="font-medium">
-                        {
-                          conditionLabels[
-                            form.getValues()
-                              .condition as keyof typeof conditionLabels
-                          ]
-                        }
+                        {conditionLabels[form.getValues().condition as keyof typeof conditionLabels]}
                       </dd>
                     </div>
                     <div className="flex justify-between">
                       <dt className="text-gray-500">Location:</dt>
-                      <dd className="font-medium">
-                        {form.getValues().location}
-                      </dd>
+                      <dd className="font-medium">{form.getValues().location}</dd>
                     </div>
                   </dl>
                 </div>
@@ -451,31 +442,39 @@ const CreateListingModal = ({
                   <dl className="space-y-2">
                     <div className="flex justify-between">
                       <dt className="text-gray-500">Listing Price:</dt>
-                      <dd className="font-medium">
-                        ${parseFloat(form.getValues().price).toFixed(2)}
-                      </dd>
+                      <dd className="font-medium">${parseFloat(form.getValues().price).toFixed(2)}</dd>
                     </div>
                     <div className="flex justify-between text-amber-600">
                       <dt>Platform Fee (10%):</dt>
-                      <dd>
-                        ${(parseFloat(form.getValues().price) * 0.1).toFixed(2)}
-                      </dd>
+                      <dd>${(parseFloat(form.getValues().price) * 0.1).toFixed(2)}</dd>
                     </div>
                     <div className="flex justify-between font-bold pt-2 border-t">
                       <dt>You Receive:</dt>
-                      <dd>
-                        ${(parseFloat(form.getValues().price) * 0.9).toFixed(2)}
-                      </dd>
+                      <dd>${(parseFloat(form.getValues().price) * 0.9).toFixed(2)}</dd>
                     </div>
                   </dl>
                 </div>
               </div>
 
+              {/* Additional Filters Preview */}
+              <div className="mt-4">
+                <h4 className="font-medium text-gray-700 mb-2">Additional Filters</h4>
+                {categoryFilters.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {categoryFilters.map((filter, idx) => (
+                      <span key={idx} className="bg-amber-200 text-amber-900 px-3 py-1 rounded">
+                        {String(filter)}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-500">No additional filters selected.</p>
+                )}
+              </div>
+
               <div className="mt-6">
                 <h4 className="font-medium text-gray-700 mb-2">Description</h4>
-                <p className="text-gray-600 whitespace-pre-line">
-                  {form.getValues().description}
-                </p>
+                <p className="text-gray-600 whitespace-pre-line">{form.getValues().description}</p>
               </div>
             </div>
 
@@ -484,7 +483,7 @@ const CreateListingModal = ({
                 Back
               </Button>
               <Button
-                onClick={form.handleSubmit(handleSubmit)}
+                onClick={form.handleSubmit(handleSubmitInternal)}
                 disabled={isSubmitting}
                 className="gap-2"
               >
@@ -492,11 +491,7 @@ const CreateListingModal = ({
                   <>
                     <motion.div
                       animate={{ rotate: 360 }}
-                      transition={{
-                        duration: 1,
-                        repeat: Infinity,
-                        ease: "linear",
-                      }}
+                      transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
                     >
                       <Upload size={16} />
                     </motion.div>

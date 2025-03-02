@@ -157,6 +157,150 @@ export interface Database {
           updated_at?: string;
         };
       };
+      panels: {
+        Row: {
+          id: string;
+          type: string;
+          wattage: number;
+          efficiency: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          type: string;
+          wattage: number;
+          efficiency: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          type?: string;
+          wattage?: number;
+          efficiency?: number;
+          created_at?: string;
+        };
+      };
+      inverters: {
+        Row: {
+          id: string;
+          type: string;
+          power_rating: number;
+          mppts: number;
+          efficiency: number;
+          phase: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          type: string;
+          power_rating: number;
+          mppts: number;
+          efficiency: number;
+          phase: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          type?: string;
+          power_rating?: number;
+          mppts?: number;
+          efficiency?: number;
+          phase?: string;
+          created_at?: string;
+        };
+      };
+      batteries: {
+        Row: {
+          id: string;
+          type: string;
+          capacity: number;
+          voltage: number;
+          cycle_life: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          type: string;
+          capacity: number;
+          voltage: number;
+          cycle_life: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          type?: string;
+          capacity?: number;
+          voltage?: number;
+          cycle_life?: number;
+          created_at?: string;
+        };
+      };
+      mounting: {
+        Row: {
+          id: string;
+          type: string;
+          material: string;
+          resistance: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          type: string;
+          material: string;
+          resistance: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          type?: string;
+          material?: string;
+          resistance?: string;
+          created_at?: string;
+        };
+      };
+      cable: {
+        Row: {
+          id: string;
+          voltage_rating: number;
+          current_capacity: number;
+          wire_gauge: string;
+          insulation_type: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          voltage_rating: number;
+          current_capacity: number;
+          wire_gauge: string;
+          insulation_type: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          voltage_rating?: number;
+          current_capacity?: number;
+          wire_gauge?: string;
+          insulation_type?: string;
+          created_at?: string;
+        };
+      };
+      others: {
+        Row: {
+          id: string;
+          type: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          type: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          type?: string;
+          created_at?: string;
+        };
+      };
     };
     Views: {};
     Functions: {};
